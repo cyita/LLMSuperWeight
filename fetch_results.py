@@ -2,7 +2,7 @@ import os
 import json
 import pandas as pd
 
-base_path = "/home/arda/yina/LLMSuperWeight/outputs/meta-llama/Meta-Llama-3-8B-Instruct"
+base_path = "/home/arda/yina/sw/LLMSuperWeight/outputs/meta-llama/Meta-Llama-3-8B-Instruct"
 
 def walk_directory(dir_path):
     result_list = []
@@ -11,13 +11,12 @@ def walk_directory(dir_path):
             for file in files:
                 path = os.path.join(root, file)
                 root_list = root.split("/")
-                if len(root_list) == 11:
-                    clip_method = root_list[9]
+                if len(root_list) == 12:
+                    clip_method = root_list[10]
                     
                     restore_sw = clip_method.split("-")[-1]
                 else:
-                    clip_method = root_list[11]
-                    restore_sw = False
+                    continue
                 clip_method_list = clip_method.split("_")
                 blk_size = clip_method.split("_")[3]
                 clip_method_short = f"{clip_method_list[4]}_{clip_method_list[6]}" if clip_method_list[4] == "no" else f"{clip_method_list[4]}_{clip_method_list[5]}_{clip_method_list[6]}"
