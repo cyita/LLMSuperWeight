@@ -26,6 +26,7 @@ SUPER_WEIGHTS_MAP = {
     "llama-13B": [(2, 2231, 2278), (2, 2231, 6939)],
     "llama-30B": [(3, 5633, 12817), (3, 5633, 17439), (10, 5633, 14386)],
     "Meta-Llama-3-8B": [(1, 788, 2427), (1, 1384, 2427), (1, 4062, 2427)],
+    "meta-llama/Meta-Llama-3-8B-Instruct": [(1, 788, 2427), (1, 1384, 2427), (1, 4062, 2427)],
     "OLMo-1B-0724-hf": [(1, 1764, 1710), (2, 1764, 8041)],
     "OLMo-7B-0724-hf": [(1, 269, 7467), (2, 269, 8275), (7, 269, 453), (24, 269, 2300)],
     "Phi-3-mini-4k-instruct": [(2, 525, 808), (2, 1693, 808), (2, 1113, 808), (4, 525, 2723),  (4, 1113, 2723), (4, 1693, 2723)],
@@ -178,12 +179,13 @@ class HFOutlierLM(HFLM):
                 model_kwargs["quantization_config"] = quantization_config    
 
 
-
+            model_kwargs.pop("gptqmodel")
             self._model = self.AUTO_MODEL_CLASS.from_pretrained(
                 pretrained,
-                revision=revision,
+                # revision=revision,
                 torch_dtype=get_dtype(dtype),
                 trust_remote_code=trust_remote_code,
+                use_auth_token="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",
                 **model_kwargs,
             )
             # Record SW value
@@ -457,6 +459,10 @@ class HFOutlierLM(HFLM):
 
             del _model_delta
 
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
+
         return None
 
 
@@ -486,6 +492,7 @@ class HFOutlierLM(HFLM):
             "huggyllama/llama-7B", 
             "mistralai/Mistral-7B-v0.1",
             "meta/Meta-Llama-3-8B",
+            "meta-llama/Meta-Llama-3-8B-Instruct",
             "allenai/OLMo-1B-0724-hf",
             "allenai/OLMo-7B-0724-hf",
             "google/gemma-7b",

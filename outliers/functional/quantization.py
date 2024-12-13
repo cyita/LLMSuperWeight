@@ -61,8 +61,10 @@ def quantize_blockwise(weight, nbits, blocksize, clip_method, clip_threshold, sc
     shape = weight.shape
     dtype = weight.dtype
     _num_outliers = 0
+    ori_weight = None
     if weight.numel() % (blocksize) == 0:
         weight = weight.reshape(-1, blocksize)
+        ori_weight = weight.clone()
         # block wise
         if clip_method != "no":
 
@@ -87,12 +89,15 @@ def quantize_blockwise(weight, nbits, blocksize, clip_method, clip_threshold, sc
             else:
                 raise ValueError(f"Unknown clip method: {clip_method}")
 
+            
             _num_outliers = int(torch.sum(weight.abs() > threshold ))
             weight = torch.clamp(weight, -threshold, threshold)
+            # print(f"clipped weight: \n{weight}")
         minima, _ = weight.min(dim=1, keepdims=True)
         maxima, _ = weight.max(dim=1, keepdims=True)
 
     else:
+        print("Warning: weight size is not divisible by blocksize, quantizing the whole tensor")
         if clip_method != "no":
             if clip_method == "tensor_percentage" or clip_method == "block_percentage":
                 num_top_elements = max(int(weight.numel() * clip_threshold), 1)
@@ -155,11 +160,23 @@ def quantize_blockwise(weight, nbits, blocksize, clip_method, clip_threshold, sc
             weight.add_(0.49).div_(scale).add_(minima)
         else:
             # mapping weights to [0, 15] and then round to nearest integers
-            scale = (2 ** nbits - 1) / (maxima - minima)
-            weight.sub_(minima).mul_(scale)
-            weight.round_()
-            weight.div_(scale).add_(minima)
+            # scale = (2 ** nbits - 1) / (maxima - minima)
+            # weight.sub_(minima).mul_(scale)
+            # weight.round_()
+            # weight.div_(scale).add_(minima)
 
+            max_int = 2**nbits - 1
+            min_int = 0
+            # scales = (max_val - min_val).clamp(min=1e-5) / max_int
+            scales = (maxima - minima) / max_int
+            # zeros = (-torch.round(min_val / scales)).clamp_(min_int, max_int)
+            zeros  = -minima / scales
+            a = (weight / scales + zeros).to(torch.int8)
+            weight = (
+                torch.clamp(a + 0.5, min_int, max_int).to(torch.float16) - zeros
+            ) * scales
+
+    # print(f"ori weight: \n{ori_weight}")
+    # print(f"dequantized weight: \n{weight}")
     dequantized = weight.reshape(shape).to(dtype)
     return dequantized, _num_outliers
-        
