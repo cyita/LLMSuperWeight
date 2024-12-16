@@ -3,6 +3,8 @@ import json
 import pandas as pd
 
 base_path = "/home/arda/yina/sw/LLMSuperWeight/outputs/meta-llama/Meta-Llama-3-8B-Instruct"
+# base_path = "/home/arda/yina/sw/LLMSuperWeight/outputs/Qwen/Qwen2-7B-Instruct"
+model_name = base_path.split("/")[-1]
 
 def walk_directory(dir_path):
     result_list = []
@@ -29,8 +31,8 @@ def walk_directory(dir_path):
                     lamb = results.get("lambada_openai", {}).get("acc,none", None)
                     sciq = results.get("sciq", {}).get("acc,none", None)
                     wiki = results.get("wikitext", {})
-                    wiki_word_ppl = wiki.get("word_perplexity,none", None)
-                    wiki_byte_ppl = wiki.get("byte_perplexity,none", None)
+                    wiki_word_ppl = wiki.get("word_perplexity,none", 0)
+                    wiki_byte_ppl = wiki.get("byte_perplexity,none", 0)
                     result_list.append([
                         blk_size, clip_method_short, restore_sw, "{:.4f}".format(arc_c * 100), "{:.4f}".format(arc_e * 100),
                         "{:.4f}".format(lamb * 100), "{:.4f}".format(sciq * 100), "{:.4f}".format(wiki_byte_ppl), "{:.4f}".format(wiki_word_ppl)
@@ -40,7 +42,7 @@ def walk_directory(dir_path):
     df = pd.DataFrame(result_list, columns=["blk_size", "clip_method", "restore_sw", "arc_c", "arc_e", "lamb", "sciq", "wiki_byte_ppl", "wiki_word_ppl"])
     df_sorted = df.sort_values(by=['blk_size', 'clip_method', 'restore_sw'])
     print(df_sorted)
-    df_sorted.to_csv(f'Meta-Llama-3-8B-Instruct-results.csv', mode='w', index=False)
+    df_sorted.to_csv(f'{model_name}-results.csv', mode='w', index=False)
 
 # Example usage
 walk_directory(base_path)

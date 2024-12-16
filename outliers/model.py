@@ -3,6 +3,7 @@ from typing import List, Literal, Optional, Tuple, Union
 
 import torch
 import transformers
+from tqdm import tqdm
 from packaging import version
 from peft import PeftModel
 from peft import __version__ as PEFT_VERSION
@@ -224,7 +225,7 @@ class HFOutlierLM(HFLM):
 
                 block_size_arg = int(block_size_arg) if block_size_arg not in ["channel", "tensor"] else block_size_arg
                 clip_threshold = float(clip_threshold) if clip_threshold != "None" else None 
-                clip_method_map = {"bp": "block_percentage", "tp": "tensor_percentage", "z": "zscore", "iqr": "iqr",  "no": "no"}
+                clip_method_map = {"bp": "block_percentage", "tp": "tensor_percentage", "z": "zscore", "iqr": "iqr",  "no": "no", "awq": "awq"}
                 clip_method = clip_method_map[clip_method]
                 scale_shift = True if scale_shift == "True" else False
                 use_normal_float = True if use_normal_float == "True" else False
@@ -282,6 +283,66 @@ class HFOutlierLM(HFLM):
                         num_outliers.append(_num_outliers)
                     # print statistics
                     print(f"Number of outliers. Max: {max(num_outliers)}, Min: {min(num_outliers)}, Sum: {sum(num_outliers)}, Mean {sum(num_outliers) / len(num_outliers)}")
+
+                elif quantize_method == "awq":
+                    print(f"Running {bits} bits AWQ quantization ...")
+                    print(f"Clipping parameters", clip_method, clip_threshold)
+                    print(f"Restore GO?", restore_and_scale_GO)
+
+                    from outliers.functional.awq_utils import init_quant, get_best_device, get_named_linears, clear_memory,\
+                        _search_best_clip, _get_input_feat, apply_clip, pseudo_quantize_tensor
+                    from transformers import AutoTokenizer
+                    self.tokenizer = AutoTokenizer.from_pretrained(pretrained, use_auth_token="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")
+                    modules, module_kwargs, inps = init_quant(self._model, self.tokenizer, n_samples=128, max_seq_len=512)
+                    self.modules = modules
+                    self.module_kwargs = module_kwargs
+                    self.inps = inps
+
+                    self.zero_point = True
+                    self.scale_shift = scale_shift
+                    self.group_size = block_size_arg if block_size_arg != "channel" else 0
+                    self.w_bit = bits
+
+                    for i in tqdm(range(len(self.modules)), desc="AWQ"):
+                        best_device = get_best_device()
+                        self.modules[i] = self.modules[i].to(best_device)
+                        common_device = next(self.modules[i].parameters()).device
+
+                        if self.module_kwargs.get("position_ids") is not None:
+                            self.module_kwargs["position_ids"] = self.module_kwargs[
+                                "position_ids"
+                            ].to(common_device)
+
+                        if self.module_kwargs.get("attention_mask") is not None:
+                            self.module_kwargs["attention_mask"] = self.module_kwargs[
+                                "attention_mask"
+                            ].to(common_device)
+
+                        self.inps = self.inps.to(common_device)
+
+                        this_layer_SW = []
+                        for (layer, row, col), value in self.GO_values.items():
+                            if layer == i:
+                                this_layer_SW.append((row, col, value))
+
+                        # [STEP 1]: Get layer, extract linear modules, extract input features
+                        named_linears = get_named_linears(self.modules[i])
+
+                        input_feat = _get_input_feat(self, self.modules[i], named_linears)
+                        clear_memory()
+
+                        clip_list = _search_best_clip(
+                            self, self.modules[i], named_linears, input_feat,
+                            group_size=self.group_size, layer_SW=this_layer_SW
+                        )
+                        apply_clip(self.modules[i], clip_list)
+
+                        clear_memory()
+
+                        for name, linear_layer in named_linears.items():
+                            linear_layer = linear_layer.to(get_best_device()).half()
+                            w_q, _, _ = pseudo_quantize_tensor(self, linear_layer.weight.data)
+                            linear_layer.weight.data = w_q
 
 
             if outlier_method:

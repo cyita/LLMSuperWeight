@@ -11,7 +11,8 @@ from huggingface_hub import snapshot_download
 # model_path = "meta-llama/Meta-Llama-3-8B-Instruct"
 # model_path = "Qwen/Qwen1.5-7B-Chat"
 # model_path = "mistralai/Mistral-7B-Instruct-v0.2"
-model_path="meta-llama/Meta-Llama-3-8B"
+# model_path="meta-llama/Meta-Llama-3-8B"
+model_path = "Qwen/Qwen2-7B-Instruct"
 
 model = AutoModelForCausalLM.from_pretrained(model_path,
                                              use_auth_token="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",
