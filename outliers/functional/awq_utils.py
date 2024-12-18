@@ -274,16 +274,15 @@ def _compute_best_clip(
 
     for i_b in range(org_w_shape[0] // oc_batch_size):
         w = w_all[i_b * oc_batch_size : (i_b + 1) * oc_batch_size]
-
         
+        # restore_SW_list = [item for item in layer_SW_index if item[0] == i_b]
+        # for _, row_idx, col, value in restore_SW_list:
+        #     # TODO: fix group-wise
+        #     w[row_idx, 0, 0, col] = 0
+
         input_feat = input_feat.to(w.device)
         org_out = (input_feat * w).sum(dim=-1)  # co, n_token, n_group
 
-        restore_SW_list = [item for item in layer_SW_index if item[0] == i_b]
-
-        for _, row_idx, col, value in restore_SW_list:
-            # TODO: fix group-wise
-            w[row_idx, 0, 0, col] = 0
 
         org_max_val = w.abs().amax(dim=-1, keepdim=True)  # co, 1, n_group, 1
         best_max_val = org_max_val.clone()
@@ -294,9 +293,9 @@ def _compute_best_clip(
             min_val = -max_val
             cur_w = torch.clamp(w, min_val, max_val)
             q_w = pseudo_quantize_tensor(model, cur_w)[0]
-            for _, row_idx, col, value in restore_SW_list:
-                # TODO: fix group-wise
-                q_w[row_idx, 0, 0, col] = value
+            # for _, row_idx, col, value in restore_SW_list:
+            #     # TODO: fix group-wise
+            #     q_w[row_idx, 0, 0, col] = value
             cur_out = (input_feat * q_w).sum(dim=-1)
 
             # co, 1, n_group, 1
@@ -331,10 +330,11 @@ def pseudo_quantize_tensor(self, w: torch.Tensor):
         min_val = w.amin(dim=1, keepdim=True)
         if self.scale_shift:
             # mapping weights to [-0.4999, 15.4999] and then round to nearest integers
-            scale = (2 ** self.w_bit - 0.01) / (max_val - min_val)
-            w.sub_(min_val).mul_(scale).sub_(0.49)
+            scales = (2 ** self.w_bit - 0.01) / (max_val - min_val)
+            w.sub_(min_val).mul_(scales).sub_(0.49)
             w.round_()
-            w.add_(0.49).div_(scale).add_(min_val)
+            w.add_(0.49).div_(scales).add_(min_val)
+            zeros = None
         else:
             max_int = 2**self.w_bit - 1
             min_int = 0
@@ -346,7 +346,7 @@ def pseudo_quantize_tensor(self, w: torch.Tensor):
             w = (
                 torch.clamp(a + 0.5, min_int, max_int).to(torch.float16) - zeros
             ) * scales
-        zeros = zeros.view(org_w_shape[0], -1)
+            zeros = zeros.view(org_w_shape[0], -1)
     else:
         max_val = w.abs().amax(dim=1, keepdim=True)
         max_val = max_val.clamp(min=1e-5)

@@ -113,6 +113,7 @@ class HFOutlierLM(HFLM):
         outlier_method: Optional[str] = None, # added argument for outlier experiments
         manual_quantize: Optional[str] = None,
         restore_and_scale_GO: Optional[Union[bool, float]] = False,
+        run_ppl: Optional[bool] = False,
         bnb_quantize_args: Optional[str] = None,
         clip_and_save_args: Optional[str] = None,
         load_quantized_args: Optional[str] = None,
@@ -458,6 +459,12 @@ class HFOutlierLM(HFLM):
                 self.restore_GO(pretrained, restore_and_scale_GO)
             else:
                 print("Not restoring or scaling GO...")
+
+            if run_ppl:
+                print("Running PPL evaluation...")
+                from outliers.functional.eval_utils import evaluate_perplexity
+                ppl = evaluate_perplexity(self._model, self.tokenizer)
+                print(f"------------------ Perplexity: {ppl}")
 
         else:
             try:
